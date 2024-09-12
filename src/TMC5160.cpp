@@ -39,26 +39,42 @@ TMC5160::~TMC5160()
 
 bool TMC5160::begin(const PowerStageParameters &powerParams, const MotorParameters &motorParams, MotorDirection stepperDirection )
 {
+	uint8_t ret = 0;
+	uint8_t status = 0;
+	bool result;
+
+	if ((stepperDirection != NORMAL_MOTOR_DIRECTION) && (stepperDirection != INVERSE_MOTOR_DIRECTION)) {
+		return false;
+	}
+
 	/* Clear the reset and charge pump undervoltage flags */
 	TMC5160_Reg::GSTAT_Register gstat = { 0 };
 	gstat.reset = true;
 	gstat.uv_cp = true;
-	writeRegister(TMC5160_Reg::GSTAT, gstat.value);
+	status = writeRegister(TMC5160_Reg::GSTAT, gstat.value);
+	ret = bitRead(status, 1);
+	if (ret != 0) { return false; }
 
 	TMC5160_Reg::DRV_CONF_Register drvConf = { 0 };
 	drvConf.drvstrength = constrain(powerParams.drvStrength, 0, 3);
 	drvConf.bbmtime = constrain(powerParams.bbmTime, 0, 24);
 	drvConf.bbmclks = constrain(powerParams.bbmClks, 0, 15);
-	writeRegister(TMC5160_Reg::DRV_CONF, drvConf.value);
+	status = writeRegister(TMC5160_Reg::DRV_CONF, drvConf.value);
+	ret = bitRead(status, 1);
+	if (ret != 0) { return false; }
 
-	writeRegister(TMC5160_Reg::GLOBAL_SCALER, constrain(motorParams.globalScaler, 32, 256));
+	status = writeRegister(TMC5160_Reg::GLOBAL_SCALER, constrain(motorParams.globalScaler, 32, 256));
+	ret = bitRead(status, 1);
+	if (ret != 0) { return false; }
 
 	// set initial currents and delay
 	TMC5160_Reg::IHOLD_IRUN_Register iholdrun = { 0 };
 	iholdrun.ihold = constrain(motorParams.ihold, 0, 31);
 	iholdrun.irun = constrain(motorParams.irun, 0, 31);
 	iholdrun.iholddelay = 7;
-	writeRegister(TMC5160_Reg::IHOLD_IRUN, iholdrun.value);
+	status = writeRegister(TMC5160_Reg::IHOLD_IRUN, iholdrun.value);
+	ret = bitRead(status, 1);
+	if (ret != 0) { return false; }
 
 	// TODO set short detection / overcurrent protection levels
 
@@ -73,34 +89,45 @@ bool TMC5160::begin(const PowerStageParameters &powerParams, const MotorParamete
 	pwmconf.pwm_grad = motorParams.pwmGradInitial;
 	pwmconf.pwm_ofs = motorParams.pwmOfsInitial;
 	pwmconf.freewheel = motorParams.freewheeling;
-	writeRegister(TMC5160_Reg::PWMCONF, pwmconf.value);
+	status = writeRegister(TMC5160_Reg::PWMCONF, pwmconf.value);
+	ret = bitRead(status, 1);
+	if (ret != 0) { return false; }
 
 	pwmconf.pwm_autoscale = true;
 	pwmconf.pwm_autograd = true;
-	writeRegister(TMC5160_Reg::PWMCONF, pwmconf.value);
+	status = writeRegister(TMC5160_Reg::PWMCONF, pwmconf.value);
+	ret = bitRead(status, 1);
+	if (ret != 0) { return false; }
 
 	// Recommended settings in quick config guide
 	_chopConf.toff = 5;
 	_chopConf.tbl = 2;
 	_chopConf.hstrt_tfd = 4;
 	_chopConf.hend_offset = 0;
-	writeRegister(TMC5160_Reg::CHOPCONF, _chopConf.value);
+	status = writeRegister(TMC5160_Reg::CHOPCONF, _chopConf.value);
+	ret = bitRead(status, 1);
+	if (ret != 0) { return false; }
 
 	// use position mode
-	setRampMode(POSITIONING_MODE);
+	result = setRampMode(POSITIONING_MODE);
+	if (result != true) { return false; }
 
 	TMC5160_Reg::GCONF_Register gconf = { 0 };
 	gconf.en_pwm_mode = true; //Enable stealthChop PWM mode
 	gconf.shaft = stepperDirection;
-	writeRegister(TMC5160_Reg::GCONF, gconf.value);
+	status = writeRegister(TMC5160_Reg::GCONF, gconf.value);
+	ret = bitRead(status, 1);
+	if (ret != 0) { return false; }
 
 	//Set default start, stop, threshold speeds.
 	setRampSpeeds(0, 0.1, 0); //Start, stop, threshold speeds 
 
 	//Set default D1 (must not be = 0 in positioning mode even with V1=0)
-	writeRegister(TMC5160_Reg::D_1, 100);
+	status = writeRegister(TMC5160_Reg::D_1, 100);
+	ret = bitRead(status, 1);
+	if (ret != 0) { return false; }
 
-	return false;
+	return true;
 }
 
 void TMC5160::end()
@@ -114,25 +141,36 @@ bool TMC5160::isLastReadSuccessful()
 	return _lastRegisterReadSuccess;
 }
 
-void TMC5160::setRampMode(TMC5160::RampMode mode)
+bool TMC5160::setRampMode(TMC5160::RampMode mode)
 {
+	uint8_t ret;
+	uint8_t status;
+
 	switch (mode)
 	{
+
 		case POSITIONING_MODE:
-		writeRegister(TMC5160_Reg::RAMPMODE, TMC5160_Reg::POSITIONING_MODE);
+		status = writeRegister(TMC5160_Reg::RAMPMODE, TMC5160_Reg::POSITIONING_MODE);
 		break;
 
 		case VELOCITY_MODE:
 		setMaxSpeed(0); // There is no way to know if we should move in the positive or negative direction => set speed to 0.
-		writeRegister(TMC5160_Reg::RAMPMODE, TMC5160_Reg::VELOCITY_MODE_POS);
+		status = writeRegister(TMC5160_Reg::RAMPMODE, TMC5160_Reg::VELOCITY_MODE_POS);
 		break;
 
 		case HOLD_MODE:
-		writeRegister(TMC5160_Reg::RAMPMODE, TMC5160_Reg::HOLD_MODE);
+		status = writeRegister(TMC5160_Reg::RAMPMODE, TMC5160_Reg::HOLD_MODE);
 		break;
+
+		default:
+		return false; // False for unknown mode
 	}
 
+	ret = bitRead(status, 1);
+	if (ret != 0) { return false; }
+
 	_currentRampMode = mode;
+	return true;
 }
 
 float TMC5160::getCurrentPosition()
@@ -199,43 +237,80 @@ float TMC5160::getCurrentSpeed()
 	return speedToHz(data);
 }
 
-void TMC5160::setCurrentPosition(float position, bool updateEncoderPos)
+bool TMC5160::setCurrentPosition(float position, bool updateEncoderPos)
 {
-	writeRegister(TMC5160_Reg::XACTUAL, (int32_t)(position * (float)_uStepCount));
+	uint8_t ret;
+	uint8_t status;
+	status = writeRegister(TMC5160_Reg::XACTUAL, (int32_t)(position * (float)_uStepCount));
+	ret = bitRead(status, 1);
+	if (ret != 0) { return false; }
 
 	if (updateEncoderPos)
 	{
-		writeRegister(TMC5160_Reg::X_ENC, (int32_t)(position * (float)_uStepCount));
+		status = writeRegister(TMC5160_Reg::X_ENC, (int32_t)(position * (float)_uStepCount));
+		ret = bitRead(status, 1);
+		if (ret != 0) { return false; }
 		clearEncoderDeviationFlag();
 	}
+	return true;
 }
 
-void TMC5160::setTargetPosition(float position)
+bool TMC5160::setTargetPosition(float position)
 {
-	writeRegister(TMC5160_Reg::XTARGET, (int32_t)(position * (float)_uStepCount));
+	uint8_t ret;
+	uint8_t status;
+	status = writeRegister(TMC5160_Reg::XTARGET, (int32_t)(position * (float)_uStepCount));
+	ret = bitRead(status, 1);
+	if (ret != 0) { return false; }
+	return true;
 }
 
-void TMC5160::setMaxSpeed(float speed)
+bool TMC5160::setMaxSpeed(float speed)
 {
-	writeRegister(TMC5160_Reg::VMAX,min(static_cast<int>(0x7FFFFF), static_cast<int>(speedFromHz(fabs(speed))))); // VMAX : 23 bits
+	uint8_t ret;
+	uint8_t status;
+	status = writeRegister(TMC5160_Reg::VMAX,min(static_cast<int>(0x7FFFFF), static_cast<int>(speedFromHz(fabs(speed))))); // VMAX : 23 bits
+	ret = bitRead(status, 1);
+	if (ret != 0) { return false; }
 
 	if (_currentRampMode == VELOCITY_MODE)
 	{
-		writeRegister(TMC5160_Reg::RAMPMODE, speed < 0.0f ? TMC5160_Reg::VELOCITY_MODE_NEG : TMC5160_Reg::VELOCITY_MODE_POS);
+		status = writeRegister(TMC5160_Reg::RAMPMODE, speed < 0.0f ? TMC5160_Reg::VELOCITY_MODE_NEG : TMC5160_Reg::VELOCITY_MODE_POS);
+		ret = bitRead(status, 1);
+		if (ret != 0) { return false; }
 	}
+	return true;
 }
 
-void TMC5160::setRampSpeeds(float startSpeed, float stopSpeed, float transitionSpeed)
+bool TMC5160::setRampSpeeds(float startSpeed, float stopSpeed, float transitionSpeed)
 {
-	writeRegister(TMC5160_Reg::VSTART,min(static_cast<int>(0x3FFFF), static_cast<int>(speedFromHz(fabs(startSpeed))))); // VSTART : 18 bits
-	writeRegister(TMC5160_Reg::VSTOP,min(static_cast<int>(0x3FFFF), static_cast<int>(speedFromHz(fabs(stopSpeed))))); // VSTOP : 18 bits
-	writeRegister(TMC5160_Reg::V_1,min(static_cast<int>(0xFFFFF), static_cast<int>(speedFromHz(fabs(transitionSpeed))))); // V1 : 20 bits
+	uint8_t ret;
+	uint8_t status;
+	status = writeRegister(TMC5160_Reg::VSTART,min(static_cast<int>(0x3FFFF), static_cast<int>(speedFromHz(fabs(startSpeed))))); // VSTART : 18 bits
+	ret = bitRead(status, 1);
+	if (ret != 0) { return false; }
+	status = writeRegister(TMC5160_Reg::VSTOP,min(static_cast<int>(0x3FFFF), static_cast<int>(speedFromHz(fabs(stopSpeed))))); // VSTOP : 18 bits
+	ret = bitRead(status, 1);
+	if (ret != 0) { return false; }
+	status = writeRegister(TMC5160_Reg::V_1,min(static_cast<int>(0xFFFFF), static_cast<int>(speedFromHz(fabs(transitionSpeed))))); // V1 : 20 bits
+	ret = bitRead(status, 1);
+	if (ret != 0) { return false; }
+
+	return true;
 }
 
-void TMC5160::setAcceleration(float maxAccel)
+bool TMC5160::setAcceleration(float maxAccel)
 {
-	writeRegister(TMC5160_Reg::AMAX,min(static_cast<int>(0xFFFF), static_cast<int>(accelFromHz(fabs(maxAccel))))); // AMAX, DMAX: 16 bits
-	writeRegister(TMC5160_Reg::DMAX,min(static_cast<int>(0xFFFF), static_cast<int>(accelFromHz(fabs(maxAccel)))));
+	uint8_t ret;
+	uint8_t status;
+	status = writeRegister(TMC5160_Reg::AMAX,min(static_cast<int>(0xFFFF), static_cast<int>(accelFromHz(fabs(maxAccel))))); // AMAX, DMAX: 16 bits
+	ret = bitRead(status, 1);
+	if (ret != 0) { return false; }
+	status = writeRegister(TMC5160_Reg::DMAX,min(static_cast<int>(0xFFFF), static_cast<int>(accelFromHz(fabs(maxAccel)))));
+	ret = bitRead(status, 1);
+	if (ret != 0) { return false; }
+
+	return true;
 }
 
 void TMC5160::setAccelerations(float maxAccel, float maxDecel, float startAccel, float finalDecel)
@@ -270,11 +345,19 @@ bool TMC5160::isTargetVelocityReached(void)
 	return rampStatus.velocity_reached ? true : false;
 }
 
-void TMC5160::stop()
+bool TMC5160::stop()
 {
+	uint8_t ret;
+	uint8_t status;
 	// §14.2.4 Early Ramp Termination option b)
-	writeRegister(TMC5160_Reg::VSTART, 0);
-	writeRegister(TMC5160_Reg::VMAX, 0);
+	status = writeRegister(TMC5160_Reg::VSTART, 0);
+	ret = bitRead(status, 1);
+	if (ret != 0) { return false; }
+	status = writeRegister(TMC5160_Reg::VMAX, 0);
+	ret = bitRead(status, 1);
+	if (ret != 0) { return false; }
+
+	return true;
 }
 
 void TMC5160::disable()
