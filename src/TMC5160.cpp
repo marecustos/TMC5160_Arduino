@@ -41,6 +41,7 @@ bool TMC5160::begin(const PowerStageParameters &powerParams, const MotorParamete
 {
 	uint8_t ret = 0;
 	uint8_t status = 0;
+	bool result;
 
 	/* Clear the reset and charge pump undervoltage flags */
 	TMC5160_Reg::GSTAT_Register gstat = { 0 };
@@ -104,7 +105,8 @@ bool TMC5160::begin(const PowerStageParameters &powerParams, const MotorParamete
 	if (ret != 0) { return false; }
 
 	// use position mode
-	setRampMode(POSITIONING_MODE);
+	result = setRampMode(POSITIONING_MODE);
+	if (result != true) { return false; }
 
 	TMC5160_Reg::GCONF_Register gconf = { 0 };
 	gconf.en_pwm_mode = true; //Enable stealthChop PWM mode
@@ -135,25 +137,37 @@ bool TMC5160::isLastReadSuccessful()
 	return _lastRegisterReadSuccess;
 }
 
-void TMC5160::setRampMode(TMC5160::RampMode mode)
+bool TMC5160::setRampMode(TMC5160::RampMode mode)
 {
 	switch (mode)
 	{
+		uint8_t ret;
+		uint8_t status;
 		case POSITIONING_MODE:
-		writeRegister(TMC5160_Reg::RAMPMODE, TMC5160_Reg::POSITIONING_MODE);
+		status = writeRegister(TMC5160_Reg::RAMPMODE, TMC5160_Reg::POSITIONING_MODE);
+		ret = bitRead(status, 1);
+		if (ret != 0) { return false; }
 		break;
 
 		case VELOCITY_MODE:
 		setMaxSpeed(0); // There is no way to know if we should move in the positive or negative direction => set speed to 0.
-		writeRegister(TMC5160_Reg::RAMPMODE, TMC5160_Reg::VELOCITY_MODE_POS);
+		status = writeRegister(TMC5160_Reg::RAMPMODE, TMC5160_Reg::VELOCITY_MODE_POS);
+		ret = bitRead(status, 1);
+		if (ret != 0) { return false; }
 		break;
 
 		case HOLD_MODE:
-		writeRegister(TMC5160_Reg::RAMPMODE, TMC5160_Reg::HOLD_MODE);
+		status = writeRegister(TMC5160_Reg::RAMPMODE, TMC5160_Reg::HOLD_MODE);
+		ret = bitRead(status, 1);
+		if (ret != 0) { return false; }
 		break;
+
+		default:
+		return false; // False for unknown mode
 	}
 
 	_currentRampMode = mode;
+	return true;
 }
 
 float TMC5160::getCurrentPosition()

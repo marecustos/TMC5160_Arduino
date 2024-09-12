@@ -96,7 +96,7 @@ public:
 		- Velocity mode : follows VMAX and AMAX. Call setMaxSpeed() AFTER switching to velocity mode.
 		- Hold mode : Keep current velocity until a stop event occurs.
 	*/
-	void setRampMode(RampMode mode);
+	bool setRampMode(RampMode mode);
 
 	float getCurrentPosition(); // Return the current internal position (steps)
 	float getEncoderPosition(); // Return the current position according to the encoder counter (steps)
