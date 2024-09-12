@@ -342,11 +342,19 @@ bool TMC5160::isTargetVelocityReached(void)
 	return rampStatus.velocity_reached ? true : false;
 }
 
-void TMC5160::stop()
+bool TMC5160::stop()
 {
+	uint8_t ret;
+	uint8_t status;
 	// §14.2.4 Early Ramp Termination option b)
-	writeRegister(TMC5160_Reg::VSTART, 0);
-	writeRegister(TMC5160_Reg::VMAX, 0);
+	status = writeRegister(TMC5160_Reg::VSTART, 0);
+	ret = bitRead(status, 1);
+	if (ret != 0) { return false; }
+	status = writeRegister(TMC5160_Reg::VMAX, 0);
+	ret = bitRead(status, 1);
+	if (ret != 0) { return false; }
+
+	return true;
 }
 
 void TMC5160::disable()
