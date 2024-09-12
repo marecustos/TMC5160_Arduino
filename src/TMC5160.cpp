@@ -43,6 +43,10 @@ bool TMC5160::begin(const PowerStageParameters &powerParams, const MotorParamete
 	uint8_t status = 0;
 	bool result;
 
+	if ((stepperDirection != NORMAL_MOTOR_DIRECTION) && (stepperDirection != INVERSE_MOTOR_DIRECTION)) {
+		return false;
+	}
+
 	/* Clear the reset and charge pump undervoltage flags */
 	TMC5160_Reg::GSTAT_Register gstat = { 0 };
 	gstat.reset = true;
@@ -139,32 +143,31 @@ bool TMC5160::isLastReadSuccessful()
 
 bool TMC5160::setRampMode(TMC5160::RampMode mode)
 {
+	uint8_t ret;
+	uint8_t status;
+
 	switch (mode)
 	{
-		uint8_t ret;
-		uint8_t status;
+
 		case POSITIONING_MODE:
 		status = writeRegister(TMC5160_Reg::RAMPMODE, TMC5160_Reg::POSITIONING_MODE);
-		ret = bitRead(status, 1);
-		if (ret != 0) { return false; }
 		break;
 
 		case VELOCITY_MODE:
 		setMaxSpeed(0); // There is no way to know if we should move in the positive or negative direction => set speed to 0.
 		status = writeRegister(TMC5160_Reg::RAMPMODE, TMC5160_Reg::VELOCITY_MODE_POS);
-		ret = bitRead(status, 1);
-		if (ret != 0) { return false; }
 		break;
 
 		case HOLD_MODE:
 		status = writeRegister(TMC5160_Reg::RAMPMODE, TMC5160_Reg::HOLD_MODE);
-		ret = bitRead(status, 1);
-		if (ret != 0) { return false; }
 		break;
 
 		default:
 		return false; // False for unknown mode
 	}
+
+	ret = bitRead(status, 1);
+	if (ret != 0) { return false; }
 
 	_currentRampMode = mode;
 	return true;
